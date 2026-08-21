@@ -1,0 +1,6 @@
+streamlit
+groq
+python-docx
+pypdf
+edge-tts
+tavily-python
