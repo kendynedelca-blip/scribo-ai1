@@ -1,4 +1,5 @@
 streamlit
+Authlib
 groq
 python-docx
 pypdf
