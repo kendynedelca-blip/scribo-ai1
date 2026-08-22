@@ -3916,6 +3916,19 @@ components.html(
                 });
             }
 
+            for (const doc of [parentDoc, window.top.document]) {
+                for (const selector of [
+                    '[data-testid="manage-app-button"]',
+                    'iframe[src*="statuspage.io"]',
+                    '.viewerBadge_container__1QS13',
+                    '[data-testid="stStatusWidget"]'
+                ]) {
+                    doc.querySelectorAll(selector).forEach((element) => {
+                        element.style.display = "none";
+                    });
+                }
+            }
+
             window.parent.scrollTo({
                 top: parentDoc.body.scrollHeight,
                 behavior: "smooth"
