@@ -1252,6 +1252,7 @@ defaults = {
     "project_id": None,
     "auth_initialized": False,
     "show_login": True,
+    "last_voice_audio_hash": None,
 }
 
 for key, value in defaults.items():
@@ -3446,46 +3447,42 @@ with composer:
 
                 try:
 
-                    with st.spinner(
-                        "Transcriu..."
+                    audio_hash = hashlib.sha256(
+                        audio.getvalue()
+                    ).hexdigest()
+
+                    if (
+                        audio_hash
+                        != st.session_state.last_voice_audio_hash
                     ):
-
-                        transcription = (
-                            client.audio.transcriptions.create(
-                                file=(
-                                    "audio.wav",
-                                    audio.getvalue(),
-                                ),
-                                model=WHISPER_MODEL,
-                                language="ro",
-                            )
-                        )
-
-                    voice_text = getattr(
-                        transcription,
-                        "text",
-                        str(transcription),
-                    ).strip()
-
-                    if voice_text:
-
-                        st.info(
-                            f"🎙️ {voice_text}"
-                        )
-
-                        if st.button(
-                            "Trimite mesaj vocal",
-                            key="send_voice_now",
+                        with st.spinner(
+                            "Transcriu..."
                         ):
 
-                            st.session_state.pending_prompt = (
-                                voice_text
+                            transcription = (
+                                client.audio.transcriptions.create(
+                                    file=(
+                                        "audio.wav",
+                                        audio.getvalue(),
+                                    ),
+                                    model=WHISPER_MODEL,
+                                    language="ro",
+                                )
                             )
 
-                            st.session_state.is_voice_input = (
-                                True
-                            )
+                        voice_text = getattr(
+                            transcription,
+                            "text",
+                            str(transcription),
+                        ).strip()
 
+                        if voice_text:
+
+                            st.session_state.last_voice_audio_hash = (
+                                audio_hash
+                            )
+                            st.session_state.pending_prompt = voice_text
+                            st.session_state.is_voice_input = True
                             st.rerun()
 
                 except Exception as e:
