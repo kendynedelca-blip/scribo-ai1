@@ -6,12 +6,23 @@ import json
 import asyncio
 import re
 import secrets
+import threading
+import time
+import wave
 from datetime import datetime
 from io import BytesIO
 
 import streamlit as st
 import streamlit.components.v1 as components
 from groq import Groq
+
+try:
+    import av
+    import numpy as np
+    from streamlit_webrtc import AudioProcessorBase, WebRtcMode, webrtc_streamer
+    WEBRTC_AVAILABLE = True
+except ImportError:
+    WEBRTC_AVAILABLE = False
 
 # IMPORTANT: Streamlit cere ca set_page_config să fie prima comandă Streamlit.
 st.set_page_config(
@@ -1668,6 +1679,65 @@ def get_audio_response(text, voice):
         )
     except Exception:
         return None
+
+
+if WEBRTC_AVAILABLE:
+    class LiveVoiceProcessor(AudioProcessorBase):
+        def __init__(self):
+            self.frames = []
+            self.completed = []
+            self.lock = threading.Lock()
+            self.started = False
+            self.last_voice_at = 0.0
+
+        def recv(self, frame):
+            samples = frame.to_ndarray()
+            now = time.monotonic()
+            level = float(np.abs(samples.astype(np.float32)).mean())
+
+            with self.lock:
+                if level > 450:
+                    self.started = True
+                    self.last_voice_at = now
+
+                if self.started:
+                    self.frames.append(frame)
+
+                if (
+                    self.started
+                    and now - self.last_voice_at > 1.1
+                    and self.frames
+                ):
+                    self.completed.append(self.frames)
+                    self.frames = []
+                    self.started = False
+
+            return frame
+
+        def pop_completed(self):
+            with self.lock:
+                if not self.completed:
+                    return None
+                return self.completed.pop(0)
+
+
+def audio_frames_to_wav(frames):
+    first = frames[0]
+    samples = np.concatenate(
+        [frame.to_ndarray() for frame in frames],
+        axis=1,
+    )
+    if samples.ndim > 1:
+        samples = samples[0]
+    samples = samples.astype(np.int16)
+
+    output = BytesIO()
+    with wave.open(output, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(first.sample_rate)
+        wav_file.writeframes(samples.tobytes())
+    return output.getvalue()
 
 
 # ============================================================
@@ -3449,11 +3519,54 @@ with composer:
                 "**Înregistrează vocea**"
             )
 
-            audio = st.audio_input(
-                "Vorbește acum",
-                key="voice_recorder",
-                label_visibility="collapsed",
-            )
+            audio = None
+
+            if WEBRTC_AVAILABLE:
+                voice_context = webrtc_streamer(
+                    key="live_voice",
+                    mode=WebRtcMode.SENDONLY,
+                    audio_processor_factory=LiveVoiceProcessor,
+                    media_stream_constraints={
+                        "audio": True,
+                        "video": False,
+                    },
+                    async_processing=True,
+                )
+
+                if voice_context.state.playing:
+                    st.caption(
+                        "Vorbește natural. Răspund după ce faci pauză."
+                    )
+                    processor = voice_context.audio_processor
+
+                    while voice_context.state.playing:
+                        frames = processor.pop_completed()
+                        if frames:
+                            with st.spinner("Transcriu și răspund..."):
+                                transcription = client.audio.transcriptions.create(
+                                    file=(
+                                        "audio.wav",
+                                        audio_frames_to_wav(frames),
+                                    ),
+                                    model=WHISPER_MODEL,
+                                    language="ro",
+                                )
+                            voice_text = getattr(
+                                transcription,
+                                "text",
+                                str(transcription),
+                            ).strip()
+                            if voice_text:
+                                st.session_state.pending_prompt = voice_text
+                                st.session_state.is_voice_input = True
+                                st.rerun()
+                        time.sleep(0.1)
+            else:
+                audio = st.audio_input(
+                    "Vorbește acum",
+                    key="voice_recorder",
+                    label_visibility="collapsed",
+                )
 
             if audio:
 

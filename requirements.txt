@@ -5,3 +5,4 @@ python-docx
 pypdf
 edge-tts
 tavily-python
+streamlit-webrtc
