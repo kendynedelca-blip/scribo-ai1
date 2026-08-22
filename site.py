@@ -3883,6 +3883,14 @@ components.html(
     """
     <script>
 
+    try {
+        if (window.top.location.search.includes("utm_medium=oembed")) {
+            window.top.location.replace(
+                window.top.location.pathname + "?embed=true"
+            );
+        }
+    } catch (e) {}
+
     function doScroll() {
 
         try {
