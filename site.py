@@ -4,13 +4,30 @@ import hmac
 import sqlite3
 import json
 import asyncio
+import re
 import secrets
 from datetime import datetime
 from io import BytesIO
 
 import streamlit as st
 import streamlit.components.v1 as components
+from groq import Groqimport streamlit as st
+import streamlit.components.v1 as components
 from groq import Groq
+
+st.markdown(
+    """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stStatusWidget"] {visibility: hidden;}
+    .viewerBadge_container__1QS13 {display: none !important;}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 
 
 # ============================================================
@@ -79,6 +96,38 @@ def escape_html(text):
         .replace(">", "&gt;")
         .replace('"', "&quot;")
     )
+
+
+def clean_ai_text(text):
+    cleaned = str(text or "")
+    cleaned = re.sub(r"```(?:\w+)?\s*", "", cleaned)
+    cleaned = cleaned.replace("```", "")
+    cleaned = re.sub(r"^\s{0,3}#{1,6}\s*", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\*{1,3}", "", cleaned)
+    cleaned = re.sub(r"_{1,3}", "", cleaned)
+    cleaned = re.sub(r"^\s*[-+>]\s+", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"^\s*\d+[.)]\s+", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", cleaned)
+    return cleaned.strip()
+
+
+def render_suggestions():
+    suggestions = [
+        ("✍️ Scenă", "Scrie următoarea scenă literară în stilul selectat."),
+        ("🧠 Personaj", "Creează profilul psihologic al unui nou personaj."),
+        ("💡 Intrigă", "Propune o răsturnare de situație neașteptată."),
+        ("☕ Decor", "Descrie detaliat atmosfera și cadrul scenei."),
+        ("✨ Ghidare", "Analizează stadiul curent al romanului și propune direcții de continuare."),
+    ]
+
+    suggestions_row = st.container()
+    suggestion_cols = suggestions_row.columns(5)
+
+    for column, (label, pending_prompt) in zip(suggestion_cols, suggestions):
+        with column:
+            if st.button(label, use_container_width=True):
+                st.session_state.pending_prompt = pending_prompt
+                st.rerun()
 
 
 # ============================================================
@@ -1493,12 +1542,7 @@ def image_to_data_uri(
 # ============================================================
 
 async def generate_voice_bytes(text, voice):
-    clean_text = (
-        text
-        .replace("*", "")
-        .replace("#", "")
-        .strip()
-    )[:500]
+    clean_text = clean_ai_text(text)[:500]
 
     communicate = edge_tts.Communicate(
         clean_text,
@@ -2160,6 +2204,43 @@ st.markdown(
     div[data-testid="stChatInput"] button {
         background-color: #d9774a !important;
         color: #ffffff !important;
+    }
+
+    @media (max-width: 640px) {
+        .st-key-composer {
+            width: calc(100vw - 20px);
+            margin: 6px auto;
+        }
+
+        .st-key-composer [data-testid="stHorizontalBlock"] {
+            gap: 4px;
+        }
+
+        .st-key-composer [data-testid="stHorizontalBlock"] button {
+            font-size: 12px !important;
+            padding: 0 4px !important;
+        }
+
+        div[data-testid="stChatInput"] textarea {
+            min-height: 76px !important;
+            padding: 14px 52px 38px 14px !important;
+            font-size: 16px !important;
+        }
+
+        div[data-testid="stChatInput"] > div,
+        div[data-testid="stChatInput"] [data-baseweb="base-input"],
+        div[data-testid="stChatInput"] [data-baseweb="input"],
+        div[data-testid="stChatInput"] [data-baseweb="textarea"] {
+            min-height: 80px !important;
+            border-radius: 18px !important;
+        }
+
+        .st-key-composer [data-testid="stHorizontalBlock"]:has(
+            [data-testid="column"]:nth-child(5)
+        ) {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+        }
     }
 
     </style>
@@ -2941,7 +3022,7 @@ with center_col:
                             )
 
                 safe_content = escape_html(
-                    content
+                    clean_ai_text(content)
                 ).replace(
                     "\n",
                     "<br>",
@@ -2985,32 +3066,34 @@ with center_col:
                 .strip()
             )
 
-            if (
-                last_text
-                and not last_text.endswith(
-                    (
-                        ".",
-                        "!",
-                        "?",
-                        "”",
-                        '"',
-                        "—",
-                        "```",
-                    )
-                )
-            ):
+            action_cols = st.columns(4)
 
-                if st.button(
-                    "⏩ Continuă textul întrerupt",
-                    use_container_width=True,
-                ):
-
+            with action_cols[0]:
+                if st.button("Vreau mai mult", use_container_width=True):
                     st.session_state.pending_prompt = (
-                        "Continuă exact de unde te-ai oprit, "
-                        "fără a repeta propoziția anterioară "
-                        "și fără introduceri."
+                        "Dezvoltă răspunsul anterior cu mai multe detalii relevante."
                     )
+                    st.rerun()
 
+            with action_cols[1]:
+                if st.button("Extinde", use_container_width=True):
+                    st.session_state.pending_prompt = (
+                        "Extinde răspunsul anterior, păstrând ideile și stilul."
+                    )
+                    st.rerun()
+
+            with action_cols[2]:
+                if st.button("Reîncearcă", use_container_width=True):
+                    st.session_state.pending_prompt = (
+                        "Reformulează răspunsul anterior într-un mod mai clar și mai convingător."
+                    )
+                    st.rerun()
+
+            with action_cols[3]:
+                if st.button("Treci la următoarea analiză", use_container_width=True):
+                    st.session_state.pending_prompt = (
+                        "Treci la următoarea analiză relevantă pentru cererea utilizatorului."
+                    )
                     st.rerun()
 
         st.markdown(
@@ -3089,6 +3172,8 @@ with center_col:
 # BUTOANE + ATAȘAMENTE + VOCE
 # ============================================================
 
+render_suggestions()
+
 composer = st.container(key="composer")
 
 with composer:
@@ -3099,15 +3184,22 @@ with composer:
         "Întreabă orice"
     )
 
+    if st.session_state.attached_text and not prompt:
+        if st.button(
+            "Trimite documentul",
+            use_container_width=True,
+        ):
+            prompt = "Analizează documentul atașat."
+
     # ========================================================
     # BUTON +
     # ========================================================
 
     with composer_cols[0]:
 
-        with st.popover(
+        with st.expander(
             "➕",
-            use_container_width=False,
+            expanded=False,
         ):
 
             st.markdown("**Atașamente**")
@@ -3193,9 +3285,9 @@ with composer:
 
     with composer_cols[1]:
 
-        with st.popover(
+        with st.expander(
             "🎙️",
-            use_container_width=False,
+            expanded=False,
         ):
 
             st.markdown(
@@ -3263,84 +3355,6 @@ with composer:
             "</div>",
             unsafe_allow_html=True,
         )
-
-        # ----------------------------------------------------
-        # SUGESTII
-        # ----------------------------------------------------
-
-        suggestions_row = composer.container()
-        pills = suggestions_row.columns(5)
-
-        with pills[0]:
-
-            if st.button(
-                "✍️ Scenă",
-                use_container_width=True,
-            ):
-
-                st.session_state.pending_prompt = (
-                    "Scrie următoarea scenă "
-                    "literară în stilul selectat."
-                )
-
-                st.rerun()
-
-        with pills[1]:
-
-            if st.button(
-                "🧠 Personaj",
-                use_container_width=True,
-            ):
-
-                st.session_state.pending_prompt = (
-                    "Creează profilul psihologic "
-                    "al unui nou personaj."
-                )
-
-                st.rerun()
-
-        with pills[2]:
-
-            if st.button(
-                "💡 Intrigă",
-                use_container_width=True,
-            ):
-
-                st.session_state.pending_prompt = (
-                    "Propune o răsturnare de "
-                    "situație neașteptată."
-                )
-
-                st.rerun()
-
-        with pills[3]:
-
-            if st.button(
-                "☕ Decor",
-                use_container_width=True,
-            ):
-
-                st.session_state.pending_prompt = (
-                    "Descrie detaliat atmosfera "
-                    "și cadrul scenei."
-                )
-
-                st.rerun()
-
-        with pills[4]:
-
-            if st.button(
-                "✨ Ghidare",
-                use_container_width=True,
-            ):
-
-                st.session_state.pending_prompt = (
-                    "Analizează stadiul curent "
-                    "al romanului și propune "
-                    "direcții de continuare."
-                )
-
-                st.rerun()
 
     # ========================================================
     # ROMAN
@@ -3546,7 +3560,7 @@ if prompt:
             document_context = (
                 "\n\n"
                 "[DOCUMENT ATAȘAT]:\n"
-                f"{st.session_state.attached_text[:3000]}\n"
+                f"{st.session_state.attached_text}\n"
             )
 
         # ----------------------------------------------------
@@ -3605,6 +3619,13 @@ sau idei, aplică stilul:
 și de documentul atașat atunci când
 sunt relevante.
 
+4. FORMAT RĂSPUNS
+
+Scrie întotdeauna text simplu, curat,
+ca într-un mesaj tastat de o persoană.
+Nu folosi Markdown, asteriscuri, diezuri,
+liste cu marcatori, cod sau linkuri formatate.
+
 {roman_context}
 
 {document_context}
@@ -3657,11 +3678,11 @@ sunt relevante.
                     )
                 )
 
-            answer = (
+            answer = clean_ai_text(
                 response.choices[0]
                 .message.content
                 or ""
-            ).strip()
+            )
 
             if answer:
 
