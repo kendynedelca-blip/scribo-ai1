@@ -3185,9 +3185,21 @@ with center_col:
                     "audio" in message
                     and message["audio"]
                 ):
-                    st.audio(
-                        message["audio"],
-                        format="audio/mp3",
+                    audio_data = base64.b64encode(
+                        message["audio"]
+                    ).decode("ascii")
+                    components.html(
+                        f"""
+                        <audio autoplay>
+                            <source src="data:audio/mp3;base64,{audio_data}" type="audio/mpeg">
+                        </audio>
+                        <script>
+                            const audio = document.querySelector('audio');
+                            if (audio) audio.play().catch(() => {{}});
+                        </script>
+                        """,
+                        height=1,
+                        width=1,
                     )
 
         # ----------------------------------------------------
