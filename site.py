@@ -3916,18 +3916,31 @@ components.html(
                 });
             }
 
-            for (const doc of [parentDoc, window.top.document]) {
-                for (const selector of [
+            const hidePlatformWidgets = () => {
+                const selectors = [
                     '[data-testid="manage-app-button"]',
                     'iframe[src*="statuspage.io"]',
                     '.viewerBadge_container__1QS13',
                     '[data-testid="stStatusWidget"]'
+                ];
+
+                for (const getDoc of [
+                    () => parentDoc,
+                    () => window.top.document
                 ]) {
-                    doc.querySelectorAll(selector).forEach((element) => {
-                        element.style.display = "none";
-                    });
+                    try {
+                        const doc = getDoc();
+                        selectors.forEach((selector) => {
+                            doc.querySelectorAll(selector).forEach((element) => {
+                                element.style.display = "none";
+                            });
+                        });
+                    } catch (e) {}
                 }
-            }
+            };
+
+            hidePlatformWidgets();
+            setInterval(hidePlatformWidgets, 1000);
 
             window.parent.scrollTo({
                 top: parentDoc.body.scrollHeight,
