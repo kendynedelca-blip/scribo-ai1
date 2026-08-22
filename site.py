@@ -3533,7 +3533,10 @@ with composer:
                     async_processing=True,
                 )
 
-                if voice_context.state.playing:
+                if (
+                    voice_context.state.playing
+                    and not st.session_state.pending_prompt
+                ):
                     st.caption(
                         "Vorbește natural. Răspund după ce faci pauză."
                     )
